@@ -106,6 +106,7 @@ class UsageInfo(OpenAIBaseModel):
     total_tokens: int = 0
     completion_tokens: int | None = 0
     prompt_tokens_details: PromptTokenUsageInfo | None = None
+    media_download_time: float | None = None
 
 
 class RequestResponseMetadata(BaseModel):

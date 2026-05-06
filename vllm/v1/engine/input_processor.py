@@ -222,6 +222,10 @@ class InputProcessor:
             if arrival_time is None:
                 arrival_time = prompt.get("arrival_time", time.time())  # type: ignore[assignment]
 
+            media_download_time: float = prompt.get(  # type: ignore[assignment]
+                "media_download_time", 0.0
+            )
+
             processed_inputs: ProcessorInputs = prompt  # type: ignore[assignment]
         else:
             logger.warning_once(
@@ -232,6 +236,8 @@ class InputProcessor:
 
             if arrival_time is None:
                 arrival_time = time.time()
+
+            media_download_time = 0.0
 
             processed_inputs = self.input_preprocessor.preprocess(
                 prompt,
@@ -318,6 +324,7 @@ class InputProcessor:
             sampling_params=sampling_params,
             pooling_params=pooling_params,
             arrival_time=arrival_time,
+            media_download_time=media_download_time,
             lora_request=lora_request,
             cache_salt=decoder_inputs.get("cache_salt"),
             priority=priority,

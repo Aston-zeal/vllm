@@ -215,6 +215,9 @@ class RequestStateStats:
     # first token latency
     first_token_latency: float = 0.0
 
+    # Media (image/audio/video) download time measured at the entrypoints layer
+    media_download_time: float = 0.0
+
     # Track if this request is corrupted (NaNs in logits)
     is_corrupted: bool = False
 
@@ -235,6 +238,7 @@ class FinishedRequestStats:
     mean_time_per_output_token: float = 0.0
     is_corrupted: bool = False
     num_cached_tokens: int = 0
+    media_download_time: float = 0.0
 
 
 @dataclass
@@ -452,6 +456,7 @@ class IterationStats:
             mean_time_per_output_token=mean_time_per_output_token,
             is_corrupted=req_stats.is_corrupted,
             num_cached_tokens=num_cached_tokens,
+            media_download_time=req_stats.media_download_time,
         )
         self.finished_requests.append(finished_req)
 

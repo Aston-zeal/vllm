@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import time
 import warnings
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict
@@ -1608,7 +1609,12 @@ def parse_chat_messages(
 
     _postprocess_messages(conversation)
 
+    download_start = time.perf_counter()
     mm_data, mm_uuids = mm_tracker.resolve_items()
+    if mm_data is not None:
+        mm_data["__media_download_time__"] = (
+            time.perf_counter() - download_start
+        )
 
     return conversation, mm_data, mm_uuids
 
@@ -1646,7 +1652,12 @@ async def parse_chat_messages_async(
 
     _postprocess_messages(conversation)
 
+    download_start = time.perf_counter()
     mm_data, mm_uuids = await mm_tracker.resolve_items()
+    if mm_data is not None:
+        mm_data["__media_download_time__"] = (
+            time.perf_counter() - download_start
+        )
 
     return conversation, mm_data, mm_uuids
 

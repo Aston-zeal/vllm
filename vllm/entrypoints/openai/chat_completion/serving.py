@@ -257,6 +257,7 @@ class OpenAIServingChat(OpenAIServing):
 
         # Schedule the request and get the result generator.
         max_model_len = self.model_config.max_model_len
+
         generators: list[AsyncGenerator[RequestOutput, None]] = []
         for i, engine_prompt in enumerate(engine_prompts):
             prompt_token_ids = self._extract_prompt_components(engine_prompt).token_ids
@@ -1220,6 +1221,11 @@ class OpenAIServingChat(OpenAIServing):
                         cached_tokens=num_cached_tokens
                     )
 
+                # Record media download time in usage
+                # Read from engine output (RequestStateStats) since the
+                # value was pushed into the prompt dict by the renderer.
+                if res.metrics and res.metrics.media_download_time > 0:
+                    final_usage.media_download_time = res.metrics.media_download_time
                 final_usage_chunk = ChatCompletionStreamResponse(
                     id=request_id,
                     object=chunk_object_type,
@@ -1240,6 +1246,14 @@ class OpenAIServingChat(OpenAIServing):
                 completion_tokens=num_completion_tokens,
                 total_tokens=num_prompt_tokens + num_completion_tokens,
             )
+
+            # Record media download time in request metadata
+            # Read from engine output (RequestStateStats) since the
+            # value was pushed into the prompt dict by the renderer.
+            if res.metrics and res.metrics.media_download_time > 0:
+                request_metadata.final_usage_info.media_download_time = (
+                    res.metrics.media_download_time
+                )
 
             # Log complete streaming response if output logging is enabled
             if self.enable_log_outputs and self.request_logger:
@@ -1606,6 +1620,12 @@ class OpenAIServingChat(OpenAIServing):
             usage.prompt_tokens_details = PromptTokenUsageInfo(
                 cached_tokens=final_res.num_cached_tokens
             )
+
+        # Record media download time in usage
+        # Read from engine output (RequestStateStats) since the
+        # value was pushed into the prompt dict by the renderer.
+        if final_res.metrics and final_res.metrics.media_download_time > 0:
+            usage.media_download_time = final_res.metrics.media_download_time
 
         request_metadata.final_usage_info = usage
 

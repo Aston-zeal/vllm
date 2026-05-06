@@ -75,6 +75,7 @@ class EngineCoreRequest(
     sampling_params: SamplingParams | None
     pooling_params: PoolingParams | None
     arrival_time: float
+    media_download_time: float = 0.0
     lora_request: LoRARequest | None
     cache_salt: str | None
     data_parallel_rank: int | None

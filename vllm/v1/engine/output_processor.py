@@ -123,6 +123,7 @@ class StreamingUpdate:
     prompt: str | None
     prompt_token_ids: list[int] | None
     arrival_time: float
+    media_download_time: float = 0.0
     final: bool = False
 
 
@@ -145,6 +146,7 @@ class RequestState:
         queue: RequestOutputCollector | None,
         log_stats: bool,
         stream_interval: int,
+        media_download_time: float = 0.0,
         top_p: float | None = None,
         n: int | None = None,
         temperature: float | None = None,
@@ -173,7 +175,14 @@ class RequestState:
         self.queue = queue
         self.num_cached_tokens = 0
 
-        self.stats = RequestStateStats(arrival_time=arrival_time) if log_stats else None
+        self.stats = (
+            RequestStateStats(
+                arrival_time=arrival_time,
+                media_download_time=media_download_time,
+            )
+            if log_stats
+            else None
+        )
 
         # Stream Interval
         self.stream_interval = stream_interval
@@ -202,6 +211,7 @@ class RequestState:
         self.prompt_len = len(self.prompt_token_ids)
         if self.stats is not None:
             self.stats.arrival_time = update.arrival_time
+            self.stats.media_download_time = update.media_download_time
         self.is_prefilling = True
 
     @classmethod
@@ -260,6 +270,7 @@ class RequestState:
             n=n,
             temperature=temperature,
             arrival_time=request.arrival_time,
+            media_download_time=request.media_download_time,
             queue=queue,
             log_stats=log_stats,
             stream_interval=stream_interval,
@@ -559,6 +570,7 @@ class OutputProcessor:
             prompt=prompt,
             prompt_token_ids=request.prompt_token_ids,
             arrival_time=request.arrival_time,
+            media_download_time=request.media_download_time,
         )
 
         # Apply request updates now if the last input already completed.

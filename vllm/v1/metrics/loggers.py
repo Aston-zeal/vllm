@@ -756,6 +756,16 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             histogram_time_to_first_token, engine_indexes, model_name
         )
 
+        histogram_media_download_time = self._histogram_cls(
+            name=_REQUEST_MEDIA_DOWNLOAD_METRIC_NAME,
+            documentation=_REQUEST_MEDIA_DOWNLOAD_DOC,
+            buckets=list(_REQUEST_MEDIA_DOWNLOAD_BUCKETS),
+            labelnames=labelnames,
+        )
+        self.histogram_media_download_time = make_per_engine(
+            histogram_media_download_time, engine_indexes, model_name
+        )
+
         histogram_inter_token_latency = self._histogram_cls(
             name="vllm:inter_token_latency_seconds",
             documentation="Histogram of inter-token latency in seconds.",
@@ -1159,6 +1169,10 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             self.histogram_decode_time_request[engine_idx].observe(
                 finished_request.decode_time
             )
+            if finished_request.media_download_time > 0:
+                self.histogram_media_download_time[engine_idx].observe(
+                    finished_request.media_download_time
+                )
             # Calculate prefill KV compute (excludes cached tokens)
             prefill_kv_computed = finished_request.num_prompt_tokens - max(
                 finished_request.num_cached_tokens, 0
@@ -1210,6 +1224,26 @@ def make_per_engine(
     metric: PromMetric, engine_idxs: list[int], model_name: object
 ) -> dict[int, PromMetric]:
     return {idx: metric.labels(model_name, str(idx)) for idx in engine_idxs}
+
+
+_REQUEST_MEDIA_DOWNLOAD_METRIC_NAME = "vllm:request_media_download_time_seconds"
+_REQUEST_MEDIA_DOWNLOAD_BUCKETS = [
+    0.01,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    20.0,
+    60.0,
+]
+_REQUEST_MEDIA_DOWNLOAD_DOC = (
+    "Histogram of total media (image/audio/video) download time "
+    "per request in seconds."
+)
 
 
 def build_buckets(mantissa_lst: list[int], max_value: int) -> list[int]:

@@ -46,12 +46,21 @@ class TerratorchRenderer(BaseRenderer):
             media_io_kwargs=params.media_io_kwargs,
             mm_processor_kwargs=params.mm_processor_kwargs,
         )
+        if mm_data is not None:
+            _media_dl = mm_data.pop("__media_download_time__", 0.0)
+        else:
+            _media_dl = 0.0
 
         prompt = parse_dec_only_prompt([1])  # Dummy token IDs
         if mm_data is not None:
             prompt["multi_modal_data"] = mm_data
         if mm_uuids is not None:
             prompt["multi_modal_uuids"] = mm_uuids
+
+        # Thread media download time from mm_data into the prompt
+        # dict so it survives asyncio.gather() context isolation.
+        if _media_dl > 0:
+            prompt["media_download_time"] = _media_dl
 
         return conversation, prompt
 
@@ -69,11 +78,20 @@ class TerratorchRenderer(BaseRenderer):
             media_io_kwargs=params.media_io_kwargs,
             mm_processor_kwargs=params.mm_processor_kwargs,
         )
+        if mm_data is not None:
+            _media_dl = mm_data.pop("__media_download_time__", 0.0)
+        else:
+            _media_dl = 0.0
 
         prompt = parse_dec_only_prompt([1])  # Dummy token IDs
         if mm_data is not None:
             prompt["multi_modal_data"] = mm_data
         if mm_uuids is not None:
             prompt["multi_modal_uuids"] = mm_uuids
+
+        # Thread media download time from mm_data into the prompt
+        # dict so it survives asyncio.gather() context isolation.
+        if _media_dl > 0:
+            prompt["media_download_time"] = _media_dl
 
         return conversation, prompt

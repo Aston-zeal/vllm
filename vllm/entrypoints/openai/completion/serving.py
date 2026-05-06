@@ -144,6 +144,7 @@ class OpenAIServingCompletion(OpenAIServing):
 
         # Schedule the request and get the result generator.
         max_model_len = self.model_config.max_model_len
+
         generators: list[AsyncGenerator[RequestOutput, None]] = []
         for i, engine_prompt in enumerate(engine_prompts):
             max_tokens = get_max_tokens(
@@ -428,6 +429,12 @@ class OpenAIServingCompletion(OpenAIServing):
                     cached_tokens=num_cached_tokens
                 )
 
+            # Record media download time in usage
+            # Read from engine output (RequestStateStats) since the
+            # value was pushed into the prompt dict by the renderer.
+            if res.metrics and res.metrics.media_download_time > 0:
+                final_usage_info.media_download_time = res.metrics.media_download_time
+
             if include_usage:
                 final_usage_chunk = CompletionStreamResponse(
                     id=request_id,
@@ -554,6 +561,12 @@ class OpenAIServingCompletion(OpenAIServing):
             usage.prompt_tokens_details = PromptTokenUsageInfo(
                 cached_tokens=last_final_res.num_cached_tokens
             )
+
+        # Record media download time in usage
+        # Read from engine output (RequestStateStats) since the
+        # value was pushed into the prompt dict by the renderer.
+        if last_final_res.metrics and last_final_res.metrics.media_download_time > 0:
+            usage.media_download_time = last_final_res.metrics.media_download_time
 
         request_metadata.final_usage_info = usage
         if final_res_batch:
