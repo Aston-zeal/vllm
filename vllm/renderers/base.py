@@ -650,6 +650,8 @@ class BaseRenderer(ABC, Generic[_T]):
             inputs["prompt"] = prompt_text
         if cache_salt := prompt.get("cache_salt"):
             inputs["cache_salt"] = cache_salt
+        if media_download_time := prompt.get("media_download_time", 0.0):
+            inputs["media_download_time"] = media_download_time
 
         return inputs
 
