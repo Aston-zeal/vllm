@@ -598,6 +598,7 @@ class BaseRenderer(ABC, Generic[_T]):
         mm_processor_kwargs: Mapping[str, object] | None,
         tokenization_kwargs: dict[str, Any] | None,
     ) -> "MultiModalInputs":
+        from vllm.entrypoints.chat_utils import _xhs_req_id_ctx
         from vllm.multimodal.parse import parse_mm_uuids
         from vllm.multimodal.processing import ProcessorInputs as MMProcessorInputs
 
@@ -612,6 +613,17 @@ class BaseRenderer(ABC, Generic[_T]):
             mm_data, mm_data_items, mm_uuid_items, mm_req_id
         )
 
+        # [XHS] Log preprocessing start for requests with images
+        has_images = "image" in mm_data
+        req_id = _xhs_req_id_ctx.get()
+        preprocess_start = time.perf_counter()
+        if has_images:
+            logger.info(
+                "[XHS] req_id=%s | stage=preprocess | event=start | time=%.6f",
+                req_id,
+                preprocess_start,
+            )
+
         mm_processor_inputs = MMProcessorInputs(
             prompt,
             mm_data_items,
@@ -623,6 +635,15 @@ class BaseRenderer(ABC, Generic[_T]):
 
         with set_default_torch_num_threads():
             mm_inputs = mm_processor.apply(mm_processor_inputs, mm_timing_ctx)
+
+        if has_images:
+            preprocess_end = time.perf_counter()
+            logger.info(
+                "[XHS] req_id=%s | stage=preprocess | event=end | time=%.6f | duration=%.6f",
+                req_id,
+                preprocess_end,
+                preprocess_end - preprocess_start,
+            )
 
         self.update_mm_cache_stats()
 

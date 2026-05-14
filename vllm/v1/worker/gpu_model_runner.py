@@ -2519,6 +2519,19 @@ class GPUModelRunner(
         if not mm_kwargs:
             return []
 
+        # [XHS] Log ViT execution start for requests with images
+        vit_req_ids = set()
+        for (modality, _), (req_id, _) in zip(mm_kwargs, mm_lora_refs):
+            if modality == "image":
+                vit_req_ids.add(req_id)
+        vit_start = time.perf_counter()
+        for req_id in sorted(vit_req_ids):
+            logger.info(
+                "[XHS] req_id=%s | stage=vit | event=start | time=%.6f",
+                req_id,
+                vit_start,
+            )
+
         should_time = bool(
             self.observability_config
             and self.observability_config.enable_mm_processor_stats
@@ -2659,6 +2672,16 @@ class GPUModelRunner(
             self.encoder_cache[mm_hash] = output
             logger.debug("Finish execute for mm hash %s", mm_hash)
             self.maybe_save_ec_to_connector(self.encoder_cache, mm_hash)
+
+        # [XHS] Log ViT execution end for requests with images
+        vit_end = time.perf_counter()
+        for req_id in sorted(vit_req_ids):
+            logger.info(
+                "[XHS] req_id=%s | stage=vit | event=end | time=%.6f | duration=%.6f",
+                req_id,
+                vit_end,
+                vit_end - vit_start,
+            )
 
         return encoder_outputs
 
@@ -3761,6 +3784,29 @@ class GPUModelRunner(
             self.model_config.is_encoder_decoder and num_encoder_reqs > 0
         )
 
+        # [XHS] Identify requests with images in the current batch.
+        # Only log LLM timing on the prefill step (num_computed_tokens == 0)
+        # since that is when image embeddings are first processed by the LLM.
+        llm_image_req_ids: set[str] = set()
+        for req_id in self.input_batch.req_ids:
+            if req_id not in self.requests:
+                continue
+            req_state = self.requests[req_id]
+            if req_state.num_computed_tokens > 0:
+                continue
+            for mm_feature in req_state.mm_features:
+                if mm_feature.modality == "image":
+                    llm_image_req_ids.add(req_id)
+                    break
+
+        llm_start = time.perf_counter()
+        for req_id in sorted(llm_image_req_ids):
+            logger.info(
+                "[XHS] req_id=%s | stage=llm | event=start | time=%.6f",
+                req_id,
+                llm_start,
+            )
+
         # Run the model.
         # Use persistent buffers for CUDA graphs.
         # When spec decode is enabled, defer connector finalization
@@ -3790,6 +3836,16 @@ class GPUModelRunner(
                 intermediate_tensors=intermediate_tensors,
                 inputs_embeds=inputs_embeds,
                 **model_kwargs,
+            )
+
+        # [XHS] Log LLM execution end for image requests
+        llm_end = time.perf_counter()
+        for req_id in sorted(llm_image_req_ids):
+            logger.info(
+                "[XHS] req_id=%s | stage=llm | event=end | time=%.6f | duration=%.6f",
+                req_id,
+                llm_end,
+                llm_end - llm_start,
             )
 
         with record_function_or_nullcontext("gpu_model_runner: postprocess"):

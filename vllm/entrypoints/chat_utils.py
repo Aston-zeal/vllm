@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 import asyncio
+import contextvars
 import json
 import time
 import warnings
@@ -66,6 +67,13 @@ else:
     torch = LazyLoader("torch", globals(), "torch")
 
 logger = init_logger(__name__)
+
+# ContextVar: carries request_id from the serving layer into the
+# downstream render pipeline (download, preprocessing) where the
+# final chatcmpl-xxx request_id is not yet assigned.
+_xhs_req_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "_xhs_req_id_ctx", default="unknown"
+)
 
 
 def __getattr__(name: str):
@@ -1609,12 +1617,27 @@ def parse_chat_messages(
 
     _postprocess_messages(conversation)
 
+    has_images = "image" in mm_tracker._items_by_modality
+    req_id = _xhs_req_id_ctx.get()
     download_start = time.perf_counter()
+    if has_images:
+        logger.info(
+            "[XHS] req_id=%s | stage=download | event=start | time=%.6f",
+            req_id,
+            download_start,
+        )
     mm_data, mm_uuids = mm_tracker.resolve_items()
     if mm_data is not None:
-        mm_data["__media_download_time__"] = (
-            time.perf_counter() - download_start
-        )
+        download_end = time.perf_counter()
+        duration = download_end - download_start
+        mm_data["__media_download_time__"] = duration
+        if has_images:
+            logger.info(
+                "[XHS] req_id=%s | stage=download | event=end | time=%.6f | duration=%.6f",
+                req_id,
+                download_end,
+                duration,
+            )
 
     return conversation, mm_data, mm_uuids
 
@@ -1652,12 +1675,27 @@ async def parse_chat_messages_async(
 
     _postprocess_messages(conversation)
 
+    has_images = "image" in mm_tracker._items_by_modality
+    req_id = _xhs_req_id_ctx.get()
     download_start = time.perf_counter()
+    if has_images:
+        logger.info(
+            "[XHS] req_id=%s | stage=download | event=start | time=%.6f",
+            req_id,
+            download_start,
+        )
     mm_data, mm_uuids = await mm_tracker.resolve_items()
     if mm_data is not None:
-        mm_data["__media_download_time__"] = (
-            time.perf_counter() - download_start
-        )
+        download_end = time.perf_counter()
+        duration = download_end - download_start
+        mm_data["__media_download_time__"] = duration
+        if has_images:
+            logger.info(
+                "[XHS] req_id=%s | stage=download | event=end | time=%.6f | duration=%.6f",
+                req_id,
+                download_end,
+                duration,
+            )
 
     return conversation, mm_data, mm_uuids
 

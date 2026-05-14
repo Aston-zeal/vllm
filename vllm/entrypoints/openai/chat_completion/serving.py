@@ -18,6 +18,7 @@ from vllm.engine.protocol import EngineClient
 from vllm.entrypoints.chat_utils import (
     ChatTemplateContentFormatOption,
     ConversationMessage,
+    _xhs_req_id_ctx,
     get_history_tool_calls_cnt,
     make_tool_call_id,
 )
@@ -234,15 +235,19 @@ class OpenAIServingChat(OpenAIServing):
                 tokenizer,
                 chat_template_kwargs=chat_template_kwargs,  # type: ignore[call-arg]
             )
+
+        request_id = (
+            f"chatcmpl-{self._base_request_id(raw_request, request.request_id)}"
+        )
+
+        # Set ContextVar for [XHS] timing logs in the render pipeline
+        _xhs_req_id_ctx.set(request_id)
+
         result = await self.render_chat_request(request)
         if isinstance(result, ErrorResponse):
             return result
 
         conversation, engine_prompts = result
-
-        request_id = (
-            f"chatcmpl-{self._base_request_id(raw_request, request.request_id)}"
-        )
 
         request_metadata = RequestResponseMetadata(request_id=request_id)
         if raw_request:
@@ -257,7 +262,6 @@ class OpenAIServingChat(OpenAIServing):
 
         # Schedule the request and get the result generator.
         max_model_len = self.model_config.max_model_len
-
         generators: list[AsyncGenerator[RequestOutput, None]] = []
         for i, engine_prompt in enumerate(engine_prompts):
             prompt_token_ids = self._extract_prompt_components(engine_prompt).token_ids
@@ -1221,11 +1225,6 @@ class OpenAIServingChat(OpenAIServing):
                         cached_tokens=num_cached_tokens
                     )
 
-                # Record media download time in usage
-                # Read from engine output (RequestStateStats) since the
-                # value was pushed into the prompt dict by the renderer.
-                if res.metrics and res.metrics.media_download_time > 0:
-                    final_usage.media_download_time = res.metrics.media_download_time
                 final_usage_chunk = ChatCompletionStreamResponse(
                     id=request_id,
                     object=chunk_object_type,
@@ -1246,14 +1245,6 @@ class OpenAIServingChat(OpenAIServing):
                 completion_tokens=num_completion_tokens,
                 total_tokens=num_prompt_tokens + num_completion_tokens,
             )
-
-            # Record media download time in request metadata
-            # Read from engine output (RequestStateStats) since the
-            # value was pushed into the prompt dict by the renderer.
-            if res.metrics and res.metrics.media_download_time > 0:
-                request_metadata.final_usage_info.media_download_time = (
-                    res.metrics.media_download_time
-                )
 
             # Log complete streaming response if output logging is enabled
             if self.enable_log_outputs and self.request_logger:
@@ -1620,12 +1611,6 @@ class OpenAIServingChat(OpenAIServing):
             usage.prompt_tokens_details = PromptTokenUsageInfo(
                 cached_tokens=final_res.num_cached_tokens
             )
-
-        # Record media download time in usage
-        # Read from engine output (RequestStateStats) since the
-        # value was pushed into the prompt dict by the renderer.
-        if final_res.metrics and final_res.metrics.media_download_time > 0:
-            usage.media_download_time = final_res.metrics.media_download_time
 
         request_metadata.final_usage_info = usage
 

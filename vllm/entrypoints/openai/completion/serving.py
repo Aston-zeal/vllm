@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 from fastapi import Request
 
 from vllm.engine.protocol import EngineClient
+from vllm.entrypoints.chat_utils import _xhs_req_id_ctx
 from vllm.entrypoints.logger import RequestLogger
 from vllm.entrypoints.openai.completion.protocol import (
     CompletionLogProbs,
@@ -124,13 +125,16 @@ class OpenAIServingCompletion(OpenAIServing):
                 "Streaming is not currently supported with beam search"
             )
 
+        request_id = f"cmpl-{self._base_request_id(raw_request, request.request_id)}"
+
+        # Set ContextVar for [XHS] timing logs in the render pipeline
+        _xhs_req_id_ctx.set(request_id)
+
         result = await self.render_completion_request(request)
         if isinstance(result, ErrorResponse):
             return result
 
         engine_prompts = result
-
-        request_id = f"cmpl-{self._base_request_id(raw_request, request.request_id)}"
         created_time = int(time.time())
 
         request_metadata = RequestResponseMetadata(request_id=request_id)
@@ -144,7 +148,6 @@ class OpenAIServingCompletion(OpenAIServing):
 
         # Schedule the request and get the result generator.
         max_model_len = self.model_config.max_model_len
-
         generators: list[AsyncGenerator[RequestOutput, None]] = []
         for i, engine_prompt in enumerate(engine_prompts):
             max_tokens = get_max_tokens(
@@ -429,12 +432,6 @@ class OpenAIServingCompletion(OpenAIServing):
                     cached_tokens=num_cached_tokens
                 )
 
-            # Record media download time in usage
-            # Read from engine output (RequestStateStats) since the
-            # value was pushed into the prompt dict by the renderer.
-            if res.metrics and res.metrics.media_download_time > 0:
-                final_usage_info.media_download_time = res.metrics.media_download_time
-
             if include_usage:
                 final_usage_chunk = CompletionStreamResponse(
                     id=request_id,
@@ -561,12 +558,6 @@ class OpenAIServingCompletion(OpenAIServing):
             usage.prompt_tokens_details = PromptTokenUsageInfo(
                 cached_tokens=last_final_res.num_cached_tokens
             )
-
-        # Record media download time in usage
-        # Read from engine output (RequestStateStats) since the
-        # value was pushed into the prompt dict by the renderer.
-        if last_final_res.metrics and last_final_res.metrics.media_download_time > 0:
-            usage.media_download_time = last_final_res.metrics.media_download_time
 
         request_metadata.final_usage_info = usage
         if final_res_batch:

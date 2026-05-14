@@ -10,6 +10,7 @@ from vllm.config import ModelConfig
 from vllm.entrypoints.chat_utils import (
     ChatTemplateContentFormatOption,
     ConversationMessage,
+    _xhs_req_id_ctx,
 )
 from vllm.entrypoints.logger import RequestLogger
 from vllm.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
@@ -125,6 +126,11 @@ class OpenAIServingRender:
                 "Beam search is not supported by the render endpoint"
             )
 
+        request_id = f"chatcmpl-{random_uuid()}"
+
+        # Set ContextVar for [XHS] timing logs in the render pipeline
+        _xhs_req_id_ctx.set(request_id)
+
         result = await self.render_chat(request)
         if isinstance(result, ErrorResponse):
             return result
@@ -155,8 +161,6 @@ class OpenAIServingRender:
             self.override_max_tokens,
         )
         params = request.to_sampling_params(max_tokens, self.default_sampling_params)
-
-        request_id = f"chatcmpl-{random_uuid()}"
 
         return GenerateRequest(
             request_id=request_id,
@@ -264,6 +268,10 @@ class OpenAIServingRender:
         error_check_ret = await self._check_model(request)
         if error_check_ret is not None:
             return error_check_ret
+
+        # Set ContextVar for [XHS] timing logs in the render pipeline
+        _xhs_req_id_ctx.set(f"cmpl-{random_uuid()}")
+
         result = await self.render_completion(request)
         if isinstance(result, ErrorResponse):
             return result
